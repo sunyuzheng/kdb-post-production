@@ -1,6 +1,6 @@
 ---
-name: kedaibiao-video-pipeline
-description: 给定视频文件或已有 SRT，自动完成转录→校对→断句→文章→高光→标题六步，产出可用字幕、高光分析和标题候选。
+name: kdb-post-production
+description: 给定视频文件或已有 SRT，自动完成转录→校对→断句→文章→高光→标题六步，产出可用字幕、高光分析和标题候选。课代表立正视频后期生产全链路。
 type: Workflow
 ---
 
