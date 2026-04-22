@@ -19,9 +19,10 @@ generate_article.py — SRT 字幕 → 课代表立正风格文章
 
 import argparse
 import re
-import subprocess
 import sys
 from pathlib import Path
+
+from tools.claude_cli import call_claude_file_based
 
 
 # ── 风格 Prompt（内联 axioms，不依赖外部文件）───────────────────────────────────
@@ -86,22 +87,6 @@ def srt_to_text(srt_path: Path) -> str:
     return " ".join(lines)
 
 
-# ── Claude CLI 调用 ─────────────────────────────────────────────────────────────
-
-def call_claude(prompt: str, timeout: int = 300) -> str:
-    """通过 claude -p 调用 Claude，返回输出文本"""
-    result = subprocess.run(
-        ["claude", "-p", prompt],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    if result.returncode != 0:
-        err = result.stderr.strip()
-        raise RuntimeError(f"claude -p 失败 (exit {result.returncode}): {err[:200]}")
-    return result.stdout.strip()
-
-
 # ── 主函数 ──────────────────────────────────────────────────────────────────────
 
 def generate_article(srt_path: Path, max_chars: int = 6000) -> Path:
@@ -123,8 +108,7 @@ def generate_article(srt_path: Path, max_chars: int = 6000) -> Path:
         + "\n---"
     )
 
-    article = call_claude(prompt)
-    output_path.write_text(article, encoding="utf-8")
+    call_claude_file_based(prompt, output_path)
     return output_path
 
 

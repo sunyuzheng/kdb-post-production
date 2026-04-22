@@ -14,9 +14,10 @@ generate_highlights.py — 从 SRT 逐字稿提取高光片段 v2
 
 import argparse
 import re
-import subprocess
 import sys
 from pathlib import Path
+
+from tools.claude_cli import call_claude_file_based
 
 _REPO_DATA = Path(__file__).parent.parent / "data"
 _GUIDELINE = _REPO_DATA / "guideline_kedaibiao.md"
@@ -103,19 +104,6 @@ def sample_content(text: str, max_chars: int = 14000) -> str:
     return "\n\n[...省略...]\n\n".join(parts)
 
 
-# ── Claude CLI ────────────────────────────────────────────────────────────────
-
-def call_claude(prompt: str, timeout: int = 900) -> str:
-    result = subprocess.run(
-        ["claude", "-p", "--model", "claude-opus-4-6", prompt],
-        capture_output=True, text=True, timeout=timeout,
-    )
-    if result.returncode != 0:
-        err = result.stderr.strip()
-        raise RuntimeError(f"claude -p 失败 (exit {result.returncode}): {err[:200]}")
-    return result.stdout.strip()
-
-
 # ── Prompts ───────────────────────────────────────────────────────────────────
 
 HIGHLIGHTS_FROM_ACTUAL = """\
@@ -141,9 +129,15 @@ HIGHLIGHTS_FROM_ACTUAL = """\
 
 ---
 
-分析这组高光：这期内容的中心命题是什么，谁会被打动（频道现有受众 + 更广泛的潜在人群），以及这几段高光组合在一起向观众传递了什么情绪/认知旅程。
+先判断这是访谈还是单口，这决定分析框架。
 
-然后格式化每段高光，输出：视频类型和主发言人、中心命题、受众分析、每段的引用原话 + 在整体叙事中的作用 + 为什么有力 + 观众看完会想问什么问题、整组高光的叙事弧线。
+**访谈**：分析每段高光是否同时完成两件事——
+① Vantage point：这句话如何隐性建立嘉宾权威？（不是介绍身份，而是"这句话只有在那个位置待过的人才能说出来"）
+② Cognitive gap：观众听完会产生什么具体问题？
+
+**单口**：分析这段话如何代表主播的核心判断，以及制造了什么悬念。
+
+输出：视频类型和主发言人、中心命题、受众分析、每段高光的引用原话 + vantage point 分析（仅访谈）+ cognitive gap + 在整体叙事中的位置、整组高光的叙事弧线以及各段之间的组合逻辑。
 """
 
 HIGHLIGHTS_FROM_SCAN = """\
@@ -161,13 +155,23 @@ HIGHLIGHTS_FROM_SCAN = """\
 
 ---
 
-目的：让刚点进来的观众立刻感觉"这期很值"，同时制造悬念——听完某句话后，观众想知道"为什么？怎么来的？后来呢？"
+先判断这是访谈还是单口，这决定高光选取的核心逻辑。
 
-先理解这期内容：中心命题是什么，最有张力的故事或时刻在哪里，访谈还是单口。
+**访谈**：好的高光同时完成两件事——
+① Vantage point（隐性建立嘉宾权威）：这句话，只有在那个位置待过、经历过那些事的人才能说出来。不是靠介绍身份，而是靠嘉宾说的内容本身，让观众感受到「这个人见过我没见过的东西」。有 vantage point 信号的话，往往来自跨行业横向比较、顶层内部视角、亲历重要时刻的第一手描述、深度操盘后的反常识判断。
+② Cognitive gap（制造观众脑子里的问题）：观众听完产生一个还没被满足的具体问题——「为什么这么说？怎么来的？后来呢？」
 
-然后选出最能完成上述目标的片段组合。好的高光组合有内在叙事逻辑，不只是把戏剧性时刻堆在一起——几段合起来讲一个比任何单段都更大的故事。访谈优先选嘉宾的话，单口选主播的核心论断。只用原话，不改写不总结。
+对每段候选片段问：「只有在嘉宾那个位置的人才能说这句话吗？」+「听完会产生什么具体问题？」两个都是 yes 才是强力候选。
 
-输出：视频类型和主发言人、中心命题（一句话）、受众分析（现有受众 + 潜在扩展人群）、每段高光的引用原话 + 在整体叙事中的作用 + 为什么有力 + 观众会想问的问题、整组高光的叙事弧线。
+访谈输出 **5-6 段**候选高光，覆盖嘉宾的不同侧面（经历故事、行业判断、反常识观点……），让编辑从中选组合。
+
+**单口**：选主播的核心论断，能代表这期内容最有价值的判断，让人感觉「这个人真的想清楚了」。输出 3-4 段候选。
+
+两种类型都要做到：候选之间覆盖不同侧面，不要把所有候选集中在同一个角度。几段合起来能讲一个比任何单段都更大的故事——叙事弧线在最后说明。
+
+只用原话，不改写不总结。
+
+输出：视频类型和主发言人、中心命题（一句话）、受众分析（现有受众 + 潜在扩展人群）、每段候选的引用原话 + vantage point（仅访谈）+ cognitive gap + 在整体叙事中的位置、整组候选的叙事弧线和推荐组合。
 """
 
 
@@ -205,8 +209,7 @@ def generate_highlights(srt_path: Path) -> Path:
         prompt = HIGHLIGHTS_FROM_SCAN.format(guideline=guideline, content=content)
 
     print("    高光分析中…", flush=True)
-    result = call_claude(prompt, timeout=900)
-    output_path.write_text(result, encoding="utf-8")
+    call_claude_file_based(prompt, output_path)
     print(f"    ✓ {output_path.name} 已写入")
     return output_path
 

@@ -17,9 +17,10 @@ generate_titles.py — 课代表立正播客标题三轮生成工作流 v3
 
 import argparse
 import re
-import subprocess
 import sys
 from pathlib import Path
+
+from tools.claude_cli import call_claude_file_based
 
 # ── 路径 ────────────────────────────────────────────────────────────────────────
 
@@ -66,21 +67,6 @@ def srt_to_text(srt_path: Path, max_chars: int = 6000) -> str:
         lines.append(line)
     text = " ".join(lines)
     return text[:max_chars] + "…（已截断）" if len(text) > max_chars else text
-
-
-# ── Claude CLI ──────────────────────────────────────────────────────────────────
-
-def call_claude(prompt: str, timeout: int = 900) -> str:
-    result = subprocess.run(
-        ["claude", "-p", "--model", "claude-opus-4-6", prompt],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    if result.returncode != 0:
-        err = result.stderr.strip()
-        raise RuntimeError(f"claude -p 失败 (exit {result.returncode}): {err[:200]}")
-    return result.stdout.strip()
 
 
 # ── Round 0：内容理解 + 高光驱动标题广撒网 ──────────────────────────────────────
@@ -214,8 +200,7 @@ def run_round0(content: str, highlights: str, workspace: Path) -> Path:
         )
 
     print("    Round 0：理解内容 + 多角度生成候选…", flush=True)
-    result = call_claude(prompt, timeout=900)
-    out.write_text(result, encoding="utf-8")
+    call_claude_file_based(prompt, out)
     print(f"    ✓ {out.name} 已写入")
     return out
 
@@ -240,8 +225,7 @@ def run_round1(round0: Path, highlights: str, workspace: Path) -> Path:
     )
 
     print("    Round 1：外部基准对比 + 差距诊断…", flush=True)
-    result = call_claude(prompt, timeout=900)
-    out.write_text(result, encoding="utf-8")
+    call_claude_file_based(prompt, out)
     print(f"    ✓ {out.name} 已写入")
     return out
 
@@ -260,8 +244,7 @@ def run_round2(round0: Path, round1: Path, highlights: str, final_out: Path) -> 
     )
 
     print("    Round 2：补强 + 最终选题…", flush=True)
-    result = call_claude(prompt, timeout=900)
-    final_out.write_text(result, encoding="utf-8")
+    call_claude_file_based(prompt, final_out)
     print(f"    ✓ {final_out.name} 已写入")
     return final_out
 
