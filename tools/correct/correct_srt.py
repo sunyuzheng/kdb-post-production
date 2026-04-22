@@ -19,6 +19,12 @@ import re
 import sys
 import tempfile
 from pathlib import Path
+
+# 确保 repo root 在 sys.path 中（process_video.py 会把 tools/correct/ 插入路径，导致 tools 包找不到）
+_REPO_ROOT = Path(__file__).parent.parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 from tools.claude_cli import call_claude_file_based, DEFAULT_MODEL
 
 # ── 配置 ─────────────────────────────────────────────────────────────────────
